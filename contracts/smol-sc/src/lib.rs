@@ -2,7 +2,7 @@
 
 use soroban_fixed_point_math::SorobanFixedPoint;
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Vec,
+    auth::{Context, CustomAccountInterface}, contract, contracterror, contractimpl, contracttype, crypto::Hash, token, vec, Address, Bytes, BytesN, Env, Val, Vec
 };
 
 #[contracterror]
@@ -367,8 +367,6 @@ impl Contract {
                                         .fixed_mul_floor(&env, &(count as i128), &colors_length)
                                         .max(1);
 
-                                    // println!("color_owner_amount: {}", color_owner_amount);
-
                                     update_royalties(&env, &color_owner, &buy, &color_owner_amount);
 
                                     color_owner_amounts += color_owner_amount;
@@ -376,8 +374,6 @@ impl Contract {
                                 None => continue,
                             }
                         }
-
-                        // println!("{}, {}, {}", amount, author_amount, color_owner_amounts);
 
                         // transfer asset to buy glyph owner
                         update_royalties(&env, &glyph_owner, &buy, &(amount - author_amount - color_owner_amounts));
@@ -706,25 +702,25 @@ impl Contract {
     }
 }
 
-// #[contractimpl]
-// impl CustomAccountInterface for Contract {
-//     type Error = Errors;
-//     type Signature = Option<Vec<Val>>;
+#[contractimpl]
+impl CustomAccountInterface for Contract {
+    type Error = Error;
+    type Signature = Option<Vec<Val>>;
 
-//     #[allow(non_snake_case)]
-//     fn __check_auth(
-//         env: Env,
-//         _signature_payload: Hash<32>,
-//         _signatures: Option<Vec<Val>>,
-//         _auth_contexts: Vec<Context>,
-//     ) -> Result<(), Errors> {
-//         let homesteader = get_farm_homesteader(&env);
+    #[allow(non_snake_case)]
+    fn __check_auth(
+        env: Env,
+        _signature_payload: Hash<32>,
+        _signatures: Option<Vec<Val>>,
+        _auth_contexts: Vec<Context>,
+    ) -> Result<(), Error> {
+        let admin = env.storage().instance().get::<Storage, Address>(&Storage::Admin).ok_or(Error::NotInitialized)?;
 
-//         homesteader.require_auth_for_args(vec![&env]);
+        admin.require_auth_for_args(vec![&env]);
 
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}
 
 fn get_palette(colors: Bytes) -> [u32; 256] {
     let mut colors_bytes = [0u8; 2025];
