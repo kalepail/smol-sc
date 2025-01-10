@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 
 use soroban_fixed_point_math::SorobanFixedPoint;
 use soroban_sdk::{
@@ -17,6 +17,7 @@ pub enum Error {
     GlyphNotMinted = 7,
     OfferDuplicate = 8,
     OfferNotFound = 9,
+    NoRoyaltiesToClaim = 10,
 }
 
 #[contracttype]
@@ -33,6 +34,7 @@ pub enum Storage {
     GlyphOwner(BytesN<32>),                    // Glyph Hash : Owner
     OfferSellGlyph(BytesN<32>),                // Glyph Hash : Vec<OfferBuy>
     OfferSellAsset(BytesN<32>, Address, i128), // Glyph Hash, SAC, Amount : Vec<Owner>
+    Royalties(Address, Address),                        // Owner, SAC : Amount
 }
 
 #[contracttype]
@@ -57,13 +59,17 @@ pub struct Contract;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Glyph {
     pub author: Address,
-    pub colors: Bytes, // u8 colors (up to 256 unique colors)
-    // pub palette: Vec<u32>, // count of each color
+    pub colors: Bytes,    // u8 colors (up to 256 unique colors)
     pub legend: Vec<u32>, // map of u8 color to u32 color
     pub width: u32,
 }
 
 mod tests;
+
+// TODO 
+// add ttl extensions?
+// break up contract into separate files and helpers
+// add events
 
 #[contractimpl]
 impl Contract {
@@ -100,8 +106,14 @@ impl Contract {
     pub fn update() {
         // TODO update contract variables
     }
-    pub fn upgrade() {
-        // TODO upgrade contract hash
+    pub fn upgrade(env: Env, hash: BytesN<32>) -> Result<(), Error> {
+        let admin = env.storage().instance().get::<Storage, Address>(&Storage::Admin).ok_or(Error::NotInitialized)?;
+
+        admin.require_auth();
+
+        env.deployer().update_current_contract_wasm(hash);
+
+        Ok(())
     }
 
     pub fn color_claim(env: Env, source: Address, owner: Address, color: u32) -> Result<(), Error> {
@@ -303,9 +315,6 @@ impl Contract {
                 match offers.get(0) {
                     // Found a matching offer
                     Some(owner) => {
-                        let current_contract_address = env.current_contract_address();
-                        let token_client = token::TokenClient::new(&env, &buy);
-
                         let Glyph {
                             author,
                             colors,
@@ -327,7 +336,7 @@ impl Contract {
                             .fixed_mul_floor(&env, &amount, &100)
                             .max(1);
 
-                        token_client.transfer(&current_contract_address, &author, &author_amount);
+                        update_royalties(&env, &author, &buy, &author_amount);
 
                         // transfer to color owners
                         let colors_length = colors.len() as i128;
@@ -337,9 +346,9 @@ impl Contract {
                             .get::<Storage, i128>(&Storage::ColorOwnerRoyaltyRate)
                             .ok_or(Error::NotInitialized)?;
 
-                        // TODO likely need to limit this to the first N ordered by highest count (125 storage gets)
                         let mut color_owner_amounts = 0;
 
+                        // TODO likely need to limit this to the first N ordered by highest count (125 storage gets)
                         for (index, count) in get_palette(colors).into_iter().enumerate() {
                             if index >= legend.len() as usize {
                                 break;
@@ -358,11 +367,9 @@ impl Contract {
                                         .fixed_mul_floor(&env, &(count as i128), &colors_length)
                                         .max(1);
 
-                                    token_client.transfer(
-                                        &current_contract_address,
-                                        &color_owner,
-                                        &color_owner_amount,
-                                    );
+                                    // println!("color_owner_amount: {}", color_owner_amount);
+
+                                    update_royalties(&env, &color_owner, &buy, &color_owner_amount);
 
                                     color_owner_amounts += color_owner_amount;
                                 }
@@ -370,12 +377,10 @@ impl Contract {
                             }
                         }
 
+                        // println!("{}, {}, {}", amount, author_amount, color_owner_amounts);
+
                         // transfer asset to buy glyph owner
-                        token_client.transfer(
-                            &current_contract_address,
-                            &glyph_owner,
-                            &(amount - author_amount - color_owner_amounts),
-                        );
+                        update_royalties(&env, &glyph_owner, &buy, &(amount - author_amount - color_owner_amounts));
 
                         // swap glyph ownership
                         env.storage()
@@ -447,7 +452,10 @@ impl Contract {
                     .get::<Storage, Address>(&buy_glyph_owner_key)
                     .ok_or(Error::GlyphNotMinted)?;
 
+                // Send the amount to the contract for passive claiming later
                 let token_client = token::TokenClient::new(&env, &sell);
+
+                token_client.transfer(&owner, &env.current_contract_address(), &amount);
 
                 let Glyph {
                     author,
@@ -470,7 +478,7 @@ impl Contract {
                     .fixed_mul_floor(&env, &amount, &100)
                     .max(1);
 
-                token_client.transfer(&owner, &author, &author_amount);
+                update_royalties(&env, &author, &sell, &author_amount);
 
                 // transfer to color owners
                 let colors_length = colors.len() as i128;
@@ -480,9 +488,9 @@ impl Contract {
                     .get::<Storage, i128>(&Storage::ColorOwnerRoyaltyRate)
                     .ok_or(Error::NotInitialized)?;
 
-                // TODO likely need to limit this to the first N ordered by highest count (125 storage gets)
                 let mut color_owner_amounts = 0;
 
+                // TODO likely need to limit this to the first N ordered by highest count (125 storage gets)
                 for (index, count) in get_palette(colors).into_iter().enumerate() {
                     if index >= legend.len() as usize {
                         break;
@@ -501,7 +509,7 @@ impl Contract {
                                 .fixed_mul_floor(&env, &(count as i128), &colors_length)
                                 .max(1);
 
-                            token_client.transfer(&owner, &color_owner, &color_owner_amount);
+                            update_royalties(&env, &color_owner, &sell, &color_owner_amount);
 
                             color_owner_amounts += color_owner_amount;
                         }
@@ -510,11 +518,7 @@ impl Contract {
                 }
 
                 // transfer asset to buy glyph owner
-                token_client.transfer(
-                    &owner,
-                    &buy_glyph_owner,
-                    &(amount - author_amount - color_owner_amounts),
-                );
+                update_royalties(&env, &buy_glyph_owner, &sell, &(amount - author_amount - color_owner_amounts));
 
                 // swap glyph ownership
                 env.storage()
@@ -556,7 +560,7 @@ impl Contract {
             }
         }
     }
-    pub fn offer_sell_glyph_remove(env: Env, sell: BytesN<32>, buy: OfferBuy) -> Result<(), Error> {
+    pub fn offer_sell_glyph_remove(env: Env, sell: BytesN<32>, buy: Option<OfferBuy>) -> Result<(), Error> {
         let glyph_owner_key = Storage::GlyphOwner(sell.clone());
         let offer_sell_glyph_key = Storage::OfferSellGlyph(sell);
 
@@ -574,20 +578,27 @@ impl Contract {
             .get::<Storage, Vec<OfferBuy>>(&offer_sell_glyph_key)
             .unwrap_or(Vec::new(&env));
 
-        match offers.binary_search(&buy) {
-            Ok(index) => {
-                offers.remove(index);
-            }
-            Err(_index) => {
-                return Err(Error::OfferNotFound);
+        match buy {
+            Some(buy) => match offers.binary_search(&buy) {
+                Ok(index) => {
+                    offers.remove(index);
+
+                    env.storage()
+                        .persistent()
+                        .set::<Storage, Vec<OfferBuy>>(&offer_sell_glyph_key, &offers);
+
+                        Ok(())
+                }
+                Err(_index) => {
+                    return Err(Error::OfferNotFound);
+                }
+            },
+            None => {
+                env.storage().persistent().remove(&offer_sell_glyph_key);
+
+                Ok(())
             }
         }
-
-        env.storage()
-            .persistent()
-            .set::<Storage, Vec<OfferBuy>>(&offer_sell_glyph_key, &offers);
-
-        Ok(())
     }
     pub fn offer_sell_asset_remove(
         env: Env,
@@ -676,7 +687,44 @@ impl Contract {
             }
         }
     }
+    pub fn royalties_claim(env: Env, owner: Address, sac: Address) -> Result<i128, Error> {
+        let royalties = env
+            .storage()
+            .persistent()
+            .get::<Storage, i128>(&Storage::Royalties(owner.clone(), sac.clone()))
+            .unwrap_or(0);
+
+        if royalties == 0 {
+            return Err(Error::NoRoyaltiesToClaim);
+        }
+
+        let token_client = token::TokenClient::new(&env, &sac);
+
+        token_client.transfer(&env.current_contract_address(), &owner, &royalties);
+
+        Ok(royalties)
+    }
 }
+
+// #[contractimpl]
+// impl CustomAccountInterface for Contract {
+//     type Error = Errors;
+//     type Signature = Option<Vec<Val>>;
+
+//     #[allow(non_snake_case)]
+//     fn __check_auth(
+//         env: Env,
+//         _signature_payload: Hash<32>,
+//         _signatures: Option<Vec<Val>>,
+//         _auth_contexts: Vec<Context>,
+//     ) -> Result<(), Errors> {
+//         let homesteader = get_farm_homesteader(&env);
+
+//         homesteader.require_auth_for_args(vec![&env]);
+
+//         Ok(())
+//     }
+// }
 
 fn get_palette(colors: Bytes) -> [u32; 256] {
     let mut colors_bytes = [0u8; 2025];
@@ -689,4 +737,18 @@ fn get_palette(colors: Bytes) -> [u32; 256] {
     }
 
     palette_bytes
+}
+
+fn update_royalties(env: &Env, owner: &Address, sac: &Address, amount: &i128) {
+    let royalties_key = Storage::Royalties(owner.clone(), sac.clone());
+    
+    let royalties = env
+        .storage()
+        .persistent()
+        .get::<Storage, i128>(&royalties_key)
+        .unwrap_or(0);
+
+    env.storage()
+        .persistent()
+        .set::<Storage, i128>(&royalties_key, &(royalties + amount));
 }

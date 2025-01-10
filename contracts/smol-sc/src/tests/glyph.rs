@@ -50,3 +50,8 @@ fn test_glyph_mint() {
 
     println!("{:?}", glyph);
 }
+
+#[test]
+fn test_glyph_owner_transfer() {
+    // TODO
+}

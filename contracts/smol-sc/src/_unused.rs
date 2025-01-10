@@ -1,8 +1,4 @@
 pub fn claim_color(env: Env, miner: Address, color: u32) -> Result<Address, Error> {
-    // TODO maybe just track who owns colors without actually deploying a SAC
-    // We wouldn't need to have colors be actual assets
-    // We just track who owns what colors and pay them royalties when glyph sales are made
-
     let mut hex = [0; 12];
 
     let color = if color > 0xFFFFFF {

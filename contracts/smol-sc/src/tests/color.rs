@@ -1,7 +1,7 @@
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
-// use std::println;
-// extern crate std;
+use std::println;
+extern crate std;
 
 use crate::tests::utils::{initialize, Init};
 
@@ -31,4 +31,9 @@ fn test_color_claim() {
     fee_sac_admin_client.mint(&user, &mine_fee);
 
     client.color_claim(&user, &user, &0x0000FF);
+}
+
+#[test]
+fn test_color_owner_transfer() {
+    // TODO
 }
