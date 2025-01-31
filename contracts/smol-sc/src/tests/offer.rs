@@ -436,11 +436,17 @@ fn test_remove_offers() {
 
     assert_eq!(user_1_balance, 0);
 
-    client.offer_sell_glyph_remove(&glyph_1_hash, &Some(OfferBuy::Asset(fee_sac_address.clone(), 0)));
+    client.offer_sell_glyph_remove(
+        &glyph_1_hash,
+        &Some(OfferBuy::Asset(fee_sac_address.clone(), 0)),
+    );
 
     client.offer_sell_glyph_remove(&glyph_1_hash, &Some(OfferBuy::Glyph(glyph_2_hash.clone())));
 
-    client.offer_sell_asset_remove(&OfferSellAsset(user_1.clone(), fee_sac_address.clone(), 100), &glyph_1_hash);
+    client.offer_sell_asset_remove(
+        &OfferSellAsset(user_1.clone(), fee_sac_address.clone(), 100),
+        &glyph_1_hash,
+    );
 
     let offer_1 = client.offer_sell_glyph_get(&glyph_1_hash, &None);
     let offer_2 = client.offer_sell_asset_get(
@@ -495,7 +501,10 @@ fn test_remove_all_buy_me_now_offers() {
 
     assert_eq!(offers.unwrap(), 10);
 
-    client.offer_sell_asset(&OfferSellAsset(user_2, fee_sac_address.clone(), 0), &glyph_1_hash);
+    client.offer_sell_asset(
+        &OfferSellAsset(user_2, fee_sac_address.clone(), 0),
+        &glyph_1_hash,
+    );
 
     let offers = client.offer_sell_glyph_get(&glyph_1_hash, &None);
 

@@ -26,27 +26,27 @@ fn test_glyph_mint() {
 
     let user = Address::generate(&env);
 
-    let glyph_hash = mint(&env, &client, &contract_id, &user, &user);
+    let glyph_index = mint(&env, &client, &contract_id, &user, &user);
 
     // InvocationResources {
-    //     instructions: 170098,
-    //     mem_bytes: 11792,
-    //     read_entries: 1,
-    //     write_entries: 2,
+    //     instructions: 235313,
+    //     mem_bytes: 22840,
+    //     read_entries: 0,
+    //     write_entries: 4,
     //     read_bytes: 500,
-    //     write_bytes: 2480,
-    //     contract_events_size_bytes: 0,
-    //     persistent_rent_ledger_bytes: 10155600,
-    //     persistent_entry_rent_bumps: 2,
+    //     write_bytes: 3132,
+    //     contract_events_size_bytes: 172,
+    //     persistent_rent_ledger_bytes: 10778040,
+    //     persistent_entry_rent_bumps: 4,
     //     temporary_rent_ledger_bytes: 0,
     //     temporary_entry_rent_bumps: 0,
     // }
 
     println!("{:#?}", env.cost_estimate().resources());
 
-    println!("{:?}", glyph_hash);
+    assert_eq!(glyph_index, 1);
 
-    let glyph = client.glyph_get(&glyph_hash);
+    let glyph = client.glyph_get(&glyph_index);
 
     println!("{:?}", glyph);
 }

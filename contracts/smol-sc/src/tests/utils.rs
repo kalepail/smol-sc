@@ -1,4 +1,4 @@
-use soroban_sdk::{testutils::Address as _, token, vec, Address, Bytes, BytesN, Env};
+use soroban_sdk::{testutils::Address as _, token, vec, Address, Bytes, Env, String};
 
 use crate::{Contract, ContractArgs, ContractClient};
 
@@ -57,13 +57,15 @@ pub fn mint(
     contract_id: &Address,
     author: &Address,
     owner: &Address,
-) -> BytesN<32> {
-    let mut palette = [0u8; 2025];
+) -> u32 {
+    const GLYPH_SIZE: usize = 45 * 45; // 95 * 95;
+
+    let mut palette = [0u8; GLYPH_SIZE];
 
     env.as_contract(&contract_id, || {
         let end = 2;
 
-        for i in 0..2025 {
+        for i in 0..GLYPH_SIZE {
             let mut var = env.prng().gen_range::<u64>(0..end);
 
             while var > end {
@@ -74,13 +76,15 @@ pub fn mint(
         }
     });
 
-    let glyph_hash = client.glyph_mint(
+    let glyph_index = client.glyph_mint(
         &author,
         &owner,
         &Bytes::from_array(&env, &palette),
         &vec![&env, 0, 16777215],
         &45,
+        &String::from_str(env, "Hello World"),
+        &String::from_str(env, "Lorem Ipsum"),
     );
 
-    glyph_hash
+    glyph_index
 }
