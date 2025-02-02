@@ -377,17 +377,18 @@ impl Contract {
                             .set::<Storage, Address>(&buy_glyph_owner_key, &glyph_owner);
 
                         // remove all open buy glyph sell offers
-                        env.storage()
-                            .persistent()
-                            .remove::<Storage>(&Storage::OfferSellGlyph(*buy));
+                        if env.storage().persistent().has::<Storage>(&offer_buy_glyph_key) {
+                            env.storage()
+                                .persistent()
+                                .remove::<Storage>(&offer_buy_glyph_key);
+                        }
 
                         // remove all open sell glyph sell offers
-                        env.storage()
-                            .persistent()
-                            .remove::<Storage>(&offer_sell_glyph_key);
-
-                        // delete the offer
-                        env.storage().persistent().remove(&offer_buy_glyph_key);
+                        if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
+                            env.storage()
+                                .persistent()
+                                .remove::<Storage>(&offer_sell_glyph_key);
+                        }
 
                         env.events()
                             .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy.clone()), Some(&buy_glyph_owner));
@@ -486,9 +487,11 @@ impl Contract {
                             .set::<Storage, Address>(&glyph_owner_key, &owner);
 
                         // remove all open buy glyph sell offers
-                        env.storage()
-                            .persistent()
-                            .remove::<Storage>(&offer_sell_glyph_key);
+                        if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
+                            env.storage()
+                                .persistent()
+                                .remove::<Storage>(&offer_sell_glyph_key);
+                        }
 
                         // remove and update offers
                         offers.remove(0);
@@ -638,9 +641,11 @@ impl Contract {
                     .set::<Storage, Address>(&buy_glyph_owner_key, &owner);
 
                 // remove all open buy glyph sell offers
-                env.storage()
-                    .persistent()
-                    .remove::<Storage>(&open_glyph_buy_now_offers_key);
+                if env.storage().persistent().has::<Storage>(&open_glyph_buy_now_offers_key) {
+                    env.storage()
+                        .persistent()
+                        .remove::<Storage>(&open_glyph_buy_now_offers_key);
+                }
 
                 env.events()
                     .publish((Symbol::new(&env, "offer_sell_asset"), sell, buy), Some(()));
@@ -724,7 +729,9 @@ impl Contract {
                 }
             }
             None => {
-                env.storage().persistent().remove(&offer_sell_glyph_key);
+                if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
+                    env.storage().persistent().remove::<Storage>(&offer_sell_glyph_key);
+                }
 
                 Ok(())
             }
@@ -832,10 +839,12 @@ impl Contract {
         Ok(royalties)
     }
     pub fn royalties_claim(env: Env, owner: Address, sac: Address) -> Result<i128, Error> {
+        let royalties_key = Storage::Royalties(owner.clone(), sac.clone());
+
         let royalties = env
             .storage()
             .persistent()
-            .get::<Storage, i128>(&Storage::Royalties(owner.clone(), sac.clone()))
+            .get::<Storage, i128>(&royalties_key)
             .unwrap_or(0);
 
         if royalties == 0 {
@@ -845,6 +854,10 @@ impl Contract {
         let token_client = token::TokenClient::new(&env, &sac);
 
         token_client.transfer(&env.current_contract_address(), &owner, &royalties);
+
+        env.storage()
+            .persistent()
+            .set::<Storage, i128>(&royalties_key, &0);
 
         env.events().publish(
             (Symbol::new(&env, "royalties_claim"), owner, sac),

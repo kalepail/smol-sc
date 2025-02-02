@@ -1,3 +1,3 @@
 export JWT=???
 mercury-cli --jwt $JWT --local false --mainnet false deploy
-mercury-cli --jwt $JWT --local false --mainnet false catchup --project-name "smol-sc-indexer" --contracts CDH7K6FUIGV3B2UEKHJK2REHBVHSLUJ2VNMUWRJ4EF2TXQXQQBEU4RA3
+mercury-cli --jwt $JWT --local false --mainnet false catchup --project-name "smol-sc-indexer" --contracts CDMDFINQJIC5F5UFPA6QNBEP7BBRPJKN7PCIUSW354ZQBLKV52MGTCLD

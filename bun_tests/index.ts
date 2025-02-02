@@ -11,5 +11,9 @@ console.log(
 );
 
 console.log(
-    Address.fromString('CDH7K6FUIGV3B2UEKHJK2REHBVHSLUJ2VNMUWRJ4EF2TXQXQQBEU4RA3').toBuffer()
+    Address.fromString('CDMDFINQJIC5F5UFPA6QNBEP7BBRPJKN7PCIUSW354ZQBLKV52MGTCLD').toBuffer()
+);
+
+console.log(
+    Buffer.from([1, 0, 1, 0]).toString('hex')
 );
