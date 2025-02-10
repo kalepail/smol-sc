@@ -391,7 +391,7 @@ impl Contract {
                         }
 
                         env.events()
-                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy.clone()), Some(&buy_glyph_owner));
+                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy.clone(), glyph_owner), Some(&buy_glyph_owner)); // ensure we're sending along both swapped glyph owners
 
                         return Ok(Some(buy_glyph_owner));
                     }
@@ -501,7 +501,7 @@ impl Contract {
                             .set::<Storage, Vec<Address>>(&offer_sell_asset_key, &offers);
 
                         env.events()
-                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy, *amount), Some(&owner));
+                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy, *amount), Some(&owner)); // todo ensure we're sending along the new glyph owner
 
                         return Ok(Some(owner));
                     }
@@ -539,8 +539,8 @@ impl Contract {
         env: Env,
         sell: OfferSellAsset,
         buy: u32,
-    ) -> Result<Option<()>, Error> {
-        let OfferSellAsset(owner, sell, amount) = sell;
+    ) -> Result<Option<Address>, Error> {
+        let OfferSellAsset(owner, sac, amount) = sell.clone();
 
         owner.require_auth();
 
@@ -551,7 +551,7 @@ impl Contract {
             .get::<Storage, Vec<OfferBuy>>(&open_glyph_buy_now_offers_key)
             .unwrap_or(Vec::new(&env));
 
-        match open_glyph_buy_now_offers.binary_search(OfferBuy::Asset(sell.clone(), amount)) {
+        match open_glyph_buy_now_offers.binary_search(OfferBuy::Asset(sac.clone(), amount)) {
             // Found a matching open counter offer. Take it
             Ok(_index) => {
                 let buy_glyph_owner_key = Storage::GlyphOwner(buy);
@@ -562,7 +562,7 @@ impl Contract {
                     .ok_or(Error::GlyphNotMinted)?;
 
                 // Send the amount to the contract for passive claiming later
-                let token_client = token::TokenClient::new(&env, &sell);
+                let token_client = token::TokenClient::new(&env, &sac);
 
                 token_client.transfer(&owner, &env.current_contract_address(), &amount);
 
@@ -587,7 +587,7 @@ impl Contract {
                     .fixed_mul_floor(&env, &amount, &100)
                     .max(1);
 
-                update_royalties(&env, &author, &sell, &author_amount);
+                update_royalties(&env, &author, &sac, &author_amount);
 
                 // transfer to color owners
                 let colors_length = colors.len() as i128;
@@ -619,7 +619,7 @@ impl Contract {
                                 .fixed_mul_floor(&env, &(count as i128), &colors_length)
                                 .max(1);
 
-                            update_royalties(&env, &color_owner, &sell, &color_owner_amount);
+                            update_royalties(&env, &color_owner, &sac, &color_owner_amount);
 
                             color_owner_amounts += color_owner_amount;
                         }
@@ -631,7 +631,7 @@ impl Contract {
                 update_royalties(
                     &env,
                     &buy_glyph_owner,
-                    &sell,
+                    &sac,
                     &(amount - author_amount - color_owner_amounts),
                 );
 
@@ -648,14 +648,14 @@ impl Contract {
                 }
 
                 env.events()
-                    .publish((Symbol::new(&env, "offer_sell_asset"), sell, buy), Some(()));
+                    .publish((Symbol::new(&env, "offer_sell_asset"), sell, buy), Some(owner.clone()));
 
-                Ok(Some(()))
+                Ok(Some(owner))
             }
             // No matching open counter offer. Add to buy glyph offers
             Err(_index) => {
                 let offer_sell_asset_key =
-                    Storage::OfferSellAsset(buy, sell.clone(), amount);
+                    Storage::OfferSellAsset(buy, sac.clone(), amount);
 
                 let mut offers = env
                     .storage()
@@ -673,13 +673,13 @@ impl Contract {
                     .set::<Storage, Vec<Address>>(&offer_sell_asset_key, &offers);
 
                 // transfer the asset to the contract for auto matching later
-                let token_client = token::TokenClient::new(&env, &sell);
+                let token_client = token::TokenClient::new(&env, &sac);
 
                 token_client.transfer(&owner, &env.current_contract_address(), &amount);
 
                 env.events().publish(
                     (Symbol::new(&env, "offer_sell_asset"), sell, buy),
-                    None::<()>,
+                    None::<Address>,
                 );
 
                 Ok(None)
@@ -742,11 +742,11 @@ impl Contract {
         sell: OfferSellAsset,
         buy: u32,
     ) -> Result<(), Error> {
-        let OfferSellAsset(owner, sell, amount) = sell;
+        let OfferSellAsset(owner, sac, amount) = sell.clone();
 
         owner.require_auth();
 
-        let offer_sell_asset_key = Storage::OfferSellAsset(buy, sell.clone(), amount);
+        let offer_sell_asset_key = Storage::OfferSellAsset(buy, sac.clone(), amount);
 
         let mut offers = env
             .storage()
@@ -766,7 +766,7 @@ impl Contract {
             .set::<Storage, Vec<Address>>(&offer_sell_asset_key, &offers);
 
         // refund the asset back to the user from the contract
-        let token_client = token::TokenClient::new(&env, &sell);
+        let token_client = token::TokenClient::new(&env, &sac);
 
         token_client.transfer(&env.current_contract_address(), &owner, &amount);
 
@@ -858,11 +858,6 @@ impl Contract {
         env.storage()
             .persistent()
             .set::<Storage, i128>(&royalties_key, &0);
-
-        env.events().publish(
-            (Symbol::new(&env, "royalties_claim"), owner, sac),
-            royalties,
-        );
 
         Ok(royalties)
     }
