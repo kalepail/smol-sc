@@ -2,10 +2,7 @@
 
 use soroban_fixed_point_math::SorobanFixedPoint;
 use soroban_sdk::{
-    auth::{Context, CustomAccountInterface},
-    contract, contracterror, contractimpl, contracttype,
-    crypto::Hash,
-    token, vec, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec,
+    auth::{Context, CustomAccountInterface}, contract, contracterror, contractimpl, contracttype, crypto::Hash, token, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec
 };
 
 #[contracterror]
@@ -17,12 +14,13 @@ pub enum Error {
     ColorAlreadyClaimed = 4,
     ColorNotClaimed = 5,
     GlyphTooBig = 6,
-    GlyphAlreadyMinted = 7,
-    GlyphNotMinted = 8,
-    GlyphIndex = 9,
-    OfferDuplicate = 10,
-    OfferNotFound = 11,
-    NoRoyaltiesToClaim = 12,
+    LegendUnordered = 7,
+    GlyphAlreadyMinted = 8,
+    GlyphNotMinted = 9,
+    GlyphIndex = 10,
+    OfferDuplicate = 11,
+    OfferNotFound = 12,
+    NoRoyaltiesToClaim = 13,
 }
 
 #[contracttype]
@@ -252,18 +250,32 @@ impl Contract {
         title: String,
         story: String,
     ) -> Result<u32, Error> {
+        // NOTE: we do not check that the color indexes exist in the legend
+
         if colors.len() > 45 * 45 {
             return Err(Error::GlyphTooBig);
         }
 
-        let mut colors_extended_with_width = Bytes::from(colors.clone());
-
+        let mut colors_extended_with_width = colors.clone();
+        let legend_xdr = legend.clone().to_xdr(&env);
+        
+        colors_extended_with_width.append(&legend_xdr);
         colors_extended_with_width.extend_from_slice(&width.to_be_bytes());
 
-        let glyph_hash = env.crypto().sha256(&colors_extended_with_width).to_bytes();
-        let glyph_index_key = Storage::GlyphIndexHashMap(glyph_hash.clone());
+        // ensure legend is sorted to prevent different hashes for the same glyph
+        for (index, color) in legend.iter().enumerate() {
+            let index = index as u32;
 
-        if env.storage().persistent().has::<Storage>(&glyph_index_key) {
+            if index > 0 && color < legend.get_unchecked(index - 1) {
+                return Err(Error::LegendUnordered);
+            }
+        }
+
+        // ensure the hash includes colors, legend and width
+        let glyph_hash = env.crypto().sha256(&colors_extended_with_width).to_bytes();
+        let glyph_hash_key = Storage::GlyphIndexHashMap(glyph_hash.clone());
+
+        if env.storage().persistent().has::<Storage>(&glyph_hash_key) {
             return Err(Error::GlyphAlreadyMinted);
         }
 
@@ -280,7 +292,7 @@ impl Contract {
             .instance()
             .set::<Storage, u32>(&Storage::GlyphIndex, &glyph_index);
 
-        env.storage().persistent().set::<Storage, BytesN<32>>(&glyph_index_key, &glyph_hash);
+        env.storage().persistent().set::<Storage, u32>(&glyph_hash_key, &glyph_index);
 
         env.storage()
             .persistent()
@@ -894,8 +906,7 @@ fn get_palette(colors: Bytes) -> [u32; 256] {
     let mut palette_bytes = [0u32; 256];
 
     // colors.copy_into_slice(&mut colors_bytes);
-
-    // colors_bytes.
+    // TODO should we loop over colors or colors_bytes?
 
     for (index, color) in colors.into_iter().enumerate() {
         if index > colors_length {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use zephyr_sdk::{prelude::{Limits, WriteXdr}, AgnosticRequest, EnvClient, Method};
 
-const CONTRACT: [u8; 32] = [ 90, 216, 181, 60, 27, 91, 175, 26, 110, 117, 16, 82, 185, 158, 107, 28, 195, 5, 193, 6, 92, 198, 235, 195, 77, 246, 162, 54, 133, 41, 142, 1 ];
+const CONTRACT: [u8; 32] = [ 201, 191, 176, 98, 141, 215, 142, 213, 56, 139, 113, 57, 4, 35, 13, 16, 20, 63, 185, 195, 187, 201, 235, 175, 221, 38, 84, 57, 198, 98, 248, 188 ];
 
 #[derive(Serialize, Deserialize)]
 pub struct Body {

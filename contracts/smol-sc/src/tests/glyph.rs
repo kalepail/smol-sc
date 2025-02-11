@@ -29,14 +29,14 @@ fn test_glyph_mint() {
     let glyph_index = mint(&env, &client, &contract_id, &user, &user);
 
     // InvocationResources {
-    //     instructions: 235313,
-    //     mem_bytes: 22840,
+    //     instructions: 241383,
+    //     mem_bytes: 26939,
     //     read_entries: 0,
     //     write_entries: 4,
     //     read_bytes: 500,
-    //     write_bytes: 3132,
+    //     write_bytes: 3100,
     //     contract_events_size_bytes: 172,
-    //     persistent_rent_ledger_bytes: 10778040,
+    //     persistent_rent_ledger_bytes: 10647000,
     //     persistent_entry_rent_bumps: 4,
     //     temporary_rent_ledger_bytes: 0,
     //     temporary_entry_rent_bumps: 0,

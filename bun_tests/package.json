@@ -9,6 +9,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@lunapaint/png-codec": "^0.2.0",
     "@stellar/stellar-sdk": "^13.1.0"
   }
 }
