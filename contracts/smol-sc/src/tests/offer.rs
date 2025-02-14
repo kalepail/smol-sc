@@ -4,7 +4,10 @@ use std::println;
 extern crate std;
 
 use crate::{
-    tests::utils::{initialize, mint, Init},
+    tests::{
+        glyph,
+        utils::{initialize, mint, Init},
+    },
     OfferBuy, OfferSellAsset, OfferSellAssetGet,
 };
 
@@ -15,16 +18,19 @@ fn test_offer_glyph_for_glyph() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
     let Init {
         contract_id,
         client,
+        fee_sac_admin_client,
         ..
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
@@ -32,8 +38,11 @@ fn test_offer_glyph_for_glyph() {
     let user_1 = Address::generate(&env);
     let user_2 = Address::generate(&env);
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
-    let glyph_2_hash = mint(&env, &client, &contract_id, &user_2, &user_2);
+    fee_sac_admin_client.mint(&user_1, &glyph_fee);
+    fee_sac_admin_client.mint(&user_2, &glyph_fee);
+
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
+    let glyph_2_hash = mint(&env, &client, &contract_id, &user_2, &user_2, &user_2);
 
     client.offer_sell_glyph(&glyph_1_hash, &OfferBuy::Glyph(glyph_2_hash.clone()));
 
@@ -69,6 +78,7 @@ fn test_offer_glyph_for_asset() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -82,6 +92,7 @@ fn test_offer_glyph_for_asset() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
@@ -91,9 +102,10 @@ fn test_offer_glyph_for_asset() {
     let user_1 = Address::generate(&env);
     let user_2 = Address::generate(&env);
 
+    fee_sac_admin_client.mint(&user_1, &glyph_fee);
     fee_sac_admin_client.mint(&user_2, &amount);
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     client.offer_sell_glyph(
         &glyph_1_hash,
@@ -141,6 +153,7 @@ fn test_offer_asset_for_glyph() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -154,6 +167,7 @@ fn test_offer_asset_for_glyph() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
@@ -163,9 +177,10 @@ fn test_offer_asset_for_glyph() {
     let user_1 = Address::generate(&env);
     let user_2 = Address::generate(&env);
 
+    fee_sac_admin_client.mint(&user_1, &glyph_fee);
     fee_sac_admin_client.mint(&user_2, &amount);
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     client.offer_sell_asset(
         &OfferSellAsset(user_2.clone(), fee_sac_address.clone(), amount),
@@ -216,6 +231,7 @@ fn test_multiple_offers_and_royalties() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -229,6 +245,7 @@ fn test_multiple_offers_and_royalties() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
@@ -239,13 +256,14 @@ fn test_multiple_offers_and_royalties() {
     let user_2 = Address::generate(&env);
     let user_3 = Address::generate(&env);
 
+    fee_sac_admin_client.mint(&user_1, &glyph_fee);
     fee_sac_admin_client.mint(&user_2, &amount);
     fee_sac_admin_client.mint(&user_3, &(amount + mine_fee + mine_fee));
 
     client.color_claim(&user_3, &user_3, &0);
     client.color_claim(&user_3, &user_3, &16777215);
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     // Make 2 offers from user 2 and user 3 for the same glyph_1
     client.offer_sell_asset(
@@ -335,6 +353,7 @@ fn test_get_offers() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -347,16 +366,17 @@ fn test_get_offers() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
 
     let user_1 = Address::generate(&env);
 
-    fee_sac_admin_client.mint(&user_1, &100);
+    fee_sac_admin_client.mint(&user_1, &(100 + glyph_fee * 2));
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
-    let glyph_2_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
+    let glyph_2_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     client.offer_sell_glyph(&glyph_1_hash, &OfferBuy::Asset(fee_sac_address.clone(), 0));
 
@@ -398,6 +418,7 @@ fn test_remove_offers() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -411,16 +432,17 @@ fn test_remove_offers() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
 
     let user_1 = Address::generate(&env);
 
-    fee_sac_admin_client.mint(&user_1, &100);
+    fee_sac_admin_client.mint(&user_1, &(100 + glyph_fee * 2));
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
-    let glyph_2_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
+    let glyph_2_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     client.offer_sell_glyph(&glyph_1_hash, &OfferBuy::Asset(fee_sac_address.clone(), 0));
 
@@ -470,6 +492,7 @@ fn test_remove_all_buy_me_now_offers() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -477,10 +500,12 @@ fn test_remove_all_buy_me_now_offers() {
         contract_id,
         client,
         fee_sac_address,
+        fee_sac_admin_client,
         ..
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
@@ -488,7 +513,9 @@ fn test_remove_all_buy_me_now_offers() {
     let user_1 = Address::generate(&env);
     let user_2 = Address::generate(&env);
 
-    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1);
+    fee_sac_admin_client.mint(&user_1, &glyph_fee);
+
+    let glyph_1_hash = mint(&env, &client, &contract_id, &user_1, &user_1, &user_1);
 
     for index in 0..10 {
         client.offer_sell_glyph(

@@ -9,24 +9,31 @@ use crate::tests::utils::{initialize, mint, Init};
 fn test_glyph_mint() {
     let env = Env::default();
 
+    env.mock_all_auths();
+
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
     let Init {
         contract_id,
         client,
+        fee_sac_admin_client,
         ..
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );
 
     let user = Address::generate(&env);
 
-    let glyph_index = mint(&env, &client, &contract_id, &user, &user);
+    fee_sac_admin_client.mint(&user, &glyph_fee);
+
+    let glyph_index = mint(&env, &client, &contract_id, &user, &user, &user);
 
     // InvocationResources {
     //     instructions: 241383,

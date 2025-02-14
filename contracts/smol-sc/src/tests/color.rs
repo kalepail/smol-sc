@@ -12,6 +12,7 @@ fn test_color_claim() {
     env.mock_all_auths();
 
     let mine_fee = 250_0000000;
+    let glyph_fee = 1_0000000;
     let color_owner_royalty_rate = 2;
     let glyph_author_royalty_rate = 5;
 
@@ -22,6 +23,7 @@ fn test_color_claim() {
     } = initialize(
         &env,
         mine_fee,
+        glyph_fee,
         color_owner_royalty_rate,
         glyph_author_royalty_rate,
     );

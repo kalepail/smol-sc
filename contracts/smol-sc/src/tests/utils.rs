@@ -16,6 +16,7 @@ pub struct Init<'a> {
 pub fn initialize(
     env: &Env,
     mine_fee: i128,
+    glyph_fee: i128,
     color_owner_royalty_rate: i128,
     glyph_author_royalty_rate: i128,
 ) -> Init {
@@ -34,6 +35,7 @@ pub fn initialize(
             &fee_sac_address,
             &fee_address,
             &mine_fee,
+            &glyph_fee,
             &color_owner_royalty_rate,
             &glyph_author_royalty_rate,
         ),
@@ -55,6 +57,7 @@ pub fn mint(
     env: &Env,
     client: &ContractClient,
     contract_id: &Address,
+    source: &Address,
     author: &Address,
     owner: &Address,
 ) -> u32 {
@@ -77,6 +80,7 @@ pub fn mint(
     });
 
     let glyph_index = client.glyph_mint(
+        &source,
         &author,
         &owner,
         &Bytes::from_array(&env, &palette),

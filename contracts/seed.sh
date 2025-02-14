@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-CONTRACT_ID=CDE37MDCRXLY5VJYRNYTSBBDBUIBIP5ZYO54T25P3UTFIOOGML4LZ7V4
+CONTRACT_ID=CA3SPLLDBCOVZDDFAXNDNDBWH5E3ULRX5AL2MVQWOCGLJO7IGO5YHE7J
 
 function invoke_default() {
     stellar contract invoke --id $CONTRACT_ID --network testnet --source default -- $@
@@ -37,6 +37,7 @@ invoke_default glyph_mint \
     --colors "00010001" \
     --legend "[0, 16777215]" \
     --width 2 \
+    --source default \
     --author default \
     --owner default \
     --title "Hello World" \
@@ -46,6 +47,7 @@ invoke_user glyph_mint \
     --colors "01000100" \
     --legend "[0, 16777215]" \
     --width 2 \
+    --source user \
     --author user \
     --owner user \
     --title "Hello World" \

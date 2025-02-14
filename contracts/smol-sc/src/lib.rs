@@ -2,7 +2,12 @@
 
 use soroban_fixed_point_math::SorobanFixedPoint;
 use soroban_sdk::{
-    auth::{Context, CustomAccountInterface}, contract, contracterror, contractimpl, contracttype, crypto::Hash, token, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec
+    auth::{Context, CustomAccountInterface},
+    contract, contracterror, contractimpl, contracttype,
+    crypto::Hash,
+    token, vec,
+    xdr::ToXdr,
+    Address, Bytes, BytesN, Env, String, Symbol, Val, Vec,
 };
 
 #[contracterror]
@@ -17,10 +22,9 @@ pub enum Error {
     LegendUnordered = 7,
     GlyphAlreadyMinted = 8,
     GlyphNotMinted = 9,
-    GlyphIndex = 10,
-    OfferDuplicate = 11,
-    OfferNotFound = 12,
-    NoRoyaltiesToClaim = 13,
+    OfferDuplicate = 10,
+    OfferNotFound = 11,
+    NoRoyaltiesToClaim = 12,
 }
 
 #[contracttype]
@@ -31,22 +35,23 @@ pub enum Storage {
     FeeAddress,
     ColorClaimFee,
     ColorOwnerRoyaltyRate,
+    GlyphMineFee,
     GlyphAuthorRoyaltyRate,
     GlyphIndex,
-    ColorOwner(u32),                           // Color : Owner
+    ColorOwner(u32),                    // Color : Owner
     Glyph(u32),                         // Glyph Index : Glyph
-    GlyphIndexHashMap(BytesN<32>), // Glyph Hash : Glyph Index
+    GlyphIndexHashMap(BytesN<32>),      // Glyph Hash : Glyph Index
     GlyphOwner(u32),                    // Glyph Index : Owner
     OfferSellGlyph(u32),                // Glyph Index : Vec<OfferBuy>
     OfferSellAsset(u32, Address, i128), // Glyph Index, SAC, Amount : Vec<Owner>
-    Royalties(Address, Address),               // Owner, SAC : Amount
+    Royalties(Address, Address),        // Owner, SAC : Amount
 }
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum OfferBuy {
     Asset(Address, i128), // SAC, Amount
-    Glyph(u32),    // Glyph Index
+    Glyph(u32),           // Glyph Index
 }
 
 #[contracttype]
@@ -74,6 +79,7 @@ mod tests;
 // TODO
 // add ttl extensions?
 // break up contract into separate files and helpers
+// with glyph mint we should emit author in the event
 
 #[contractimpl]
 impl Contract {
@@ -83,6 +89,7 @@ impl Contract {
         fee_sac: Address,
         fee_address: Address,
         color_claim_fee: i128,
+        glyph_mine_fee: i128,
         color_owner_royalty_rate: i128,
         glyph_author_royalty_rate: i128,
     ) -> Result<(), Error> {
@@ -104,6 +111,9 @@ impl Contract {
             .set::<Storage, i128>(&Storage::ColorClaimFee, &color_claim_fee);
         env.storage()
             .instance()
+            .set::<Storage, i128>(&Storage::GlyphMineFee, &glyph_mine_fee);
+        env.storage()
+            .instance()
             .set::<Storage, i128>(&Storage::ColorOwnerRoyaltyRate, &color_owner_royalty_rate);
         env.storage()
             .instance()
@@ -117,6 +127,7 @@ impl Contract {
         fee_sac: Option<Address>,
         fee_address: Option<Address>,
         color_claim_fee: Option<i128>,
+        glyph_mine_fee: Option<i128>,
         color_owner_royalty_rate: Option<i128>,
         glyph_author_royalty_rate: Option<i128>,
     ) -> Result<(), Error> {
@@ -147,6 +158,11 @@ impl Contract {
             env.storage()
                 .instance()
                 .set::<Storage, i128>(&Storage::ColorClaimFee, &color_claim_fee);
+        }
+        if let Some(glyph_mine_fee) = glyph_mine_fee {
+            env.storage()
+                .instance()
+                .set::<Storage, i128>(&Storage::GlyphMineFee, &glyph_mine_fee);
         }
         if let Some(color_owner_royalty_rate) = color_owner_royalty_rate {
             env.storage()
@@ -189,26 +205,9 @@ impl Contract {
 
         env.storage().persistent().set(&color_owner_key, &owner);
 
-        let fee_address = env
-            .storage()
-            .instance()
-            .get::<Storage, Address>(&Storage::FeeAddress)
-            .ok_or(Error::NotInitialized)?;
-        let fee_amount = env
-            .storage()
-            .instance()
-            .get::<Storage, i128>(&Storage::ColorClaimFee)
-            .ok_or(Error::NotInitialized)?;
-        let fee_sac = env
-            .storage()
-            .instance()
-            .get::<Storage, Address>(&Storage::FeeSAC)
-            .ok_or(Error::NotInitialized)?;
-        let fee_client = token::TokenClient::new(&env, &fee_sac);
-
-        source.require_auth();
-
-        fee_client.transfer(&source, &fee_address, &fee_amount);
+        if let Err(err) = pay_fee(&env, Storage::ColorClaimFee, &source) {
+            return Err(err);
+        }
 
         env.events()
             .publish((Symbol::new(&env, "color_claim"), owner), color);
@@ -242,6 +241,7 @@ impl Contract {
 
     pub fn glyph_mint(
         env: Env,
+        source: Address,
         author: Address,
         owner: Address,
         colors: Bytes,
@@ -251,6 +251,7 @@ impl Contract {
         story: String,
     ) -> Result<u32, Error> {
         // NOTE: we do not check that the color indexes exist in the legend
+        // TODO right now minting is free, should we charge a fee? Maybe KALE? Maybe charge if you want to store in persistent storage?
 
         if colors.len() > 45 * 45 {
             return Err(Error::GlyphTooBig);
@@ -258,7 +259,7 @@ impl Contract {
 
         let mut colors_extended_with_width = colors.clone();
         let legend_xdr = legend.clone().to_xdr(&env);
-        
+
         colors_extended_with_width.append(&legend_xdr);
         colors_extended_with_width.extend_from_slice(&width.to_be_bytes());
 
@@ -280,19 +281,26 @@ impl Contract {
         }
 
         let glyph = Glyph {
-            author,
+            author: author.clone(),
             colors,
             legend,
             width,
         };
 
-        let glyph_index = env.storage().instance().get::<Storage, u32>(&Storage::GlyphIndex).unwrap_or(0) + 1;
+        let glyph_index = env
+            .storage()
+            .instance()
+            .get::<Storage, u32>(&Storage::GlyphIndex)
+            .unwrap_or(0)
+            + 1;
 
         env.storage()
             .instance()
             .set::<Storage, u32>(&Storage::GlyphIndex, &glyph_index);
 
-        env.storage().persistent().set::<Storage, u32>(&glyph_hash_key, &glyph_index);
+        env.storage()
+            .persistent()
+            .set::<Storage, u32>(&glyph_hash_key, &glyph_index);
 
         env.storage()
             .persistent()
@@ -302,8 +310,12 @@ impl Contract {
             .persistent()
             .set::<Storage, Address>(&Storage::GlyphOwner(glyph_index), &owner);
 
+        if let Err(err) = pay_fee(&env, Storage::GlyphMineFee, &source) {
+            return Err(err);
+        }
+
         env.events().publish(
-            (Symbol::new(&env, "glyph_mint"), owner),
+            (Symbol::new(&env, "glyph_mint"), author, owner),
             (glyph_index, title, story),
         );
 
@@ -321,11 +333,7 @@ impl Contract {
             .get::<Storage, Address>(&Storage::GlyphOwner(glyph_index))
             .ok_or(Error::GlyphNotMinted)
     }
-    pub fn glyph_owner_transfer(
-        env: Env,
-        glyph_index: u32,
-        to: Address,
-    ) -> Result<(), Error> {
+    pub fn glyph_owner_transfer(env: Env, glyph_index: u32, to: Address) -> Result<(), Error> {
         let glyph_owner_key = Storage::GlyphOwner(glyph_index);
 
         let glyph_owner = env
@@ -344,11 +352,7 @@ impl Contract {
         Ok(())
     }
 
-    pub fn offer_sell_glyph(
-        env: Env,
-        sell: u32,
-        buy: OfferBuy,
-    ) -> Result<Option<Address>, Error> {
+    pub fn offer_sell_glyph(env: Env, sell: u32, buy: OfferBuy) -> Result<Option<Address>, Error> {
         let glyph_owner_key = Storage::GlyphOwner(sell);
         let offer_sell_glyph_key = Storage::OfferSellGlyph(sell);
 
@@ -389,21 +393,36 @@ impl Contract {
                             .set::<Storage, Address>(&buy_glyph_owner_key, &glyph_owner);
 
                         // remove all open buy glyph sell offers
-                        if env.storage().persistent().has::<Storage>(&offer_buy_glyph_key) {
+                        if env
+                            .storage()
+                            .persistent()
+                            .has::<Storage>(&offer_buy_glyph_key)
+                        {
                             env.storage()
                                 .persistent()
                                 .remove::<Storage>(&offer_buy_glyph_key);
                         }
 
                         // remove all open sell glyph sell offers
-                        if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
+                        if env
+                            .storage()
+                            .persistent()
+                            .has::<Storage>(&offer_sell_glyph_key)
+                        {
                             env.storage()
                                 .persistent()
                                 .remove::<Storage>(&offer_sell_glyph_key);
                         }
 
-                        env.events()
-                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy.clone(), glyph_owner), Some(&buy_glyph_owner)); // ensure we're sending along both swapped glyph owners
+                        env.events().publish(
+                            (
+                                Symbol::new(&env, "offer_sell_glyph"),
+                                sell,
+                                buy.clone(),
+                                glyph_owner,
+                            ),
+                            Some(&buy_glyph_owner),
+                        ); // ensure we're sending along both swapped glyph owners
 
                         return Ok(Some(buy_glyph_owner));
                     }
@@ -499,7 +518,11 @@ impl Contract {
                             .set::<Storage, Address>(&glyph_owner_key, &owner);
 
                         // remove all open buy glyph sell offers
-                        if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
+                        if env
+                            .storage()
+                            .persistent()
+                            .has::<Storage>(&offer_sell_glyph_key)
+                        {
                             env.storage()
                                 .persistent()
                                 .remove::<Storage>(&offer_sell_glyph_key);
@@ -512,8 +535,10 @@ impl Contract {
                             .persistent()
                             .set::<Storage, Vec<Address>>(&offer_sell_asset_key, &offers);
 
-                        env.events()
-                            .publish((Symbol::new(&env, "offer_sell_glyph"), sell, buy, *amount), Some(&owner)); // todo ensure we're sending along the new glyph owner
+                        env.events().publish(
+                            (Symbol::new(&env, "offer_sell_glyph"), sell, buy, *amount),
+                            Some(&owner),
+                        );
 
                         return Ok(Some(owner));
                     }
@@ -653,21 +678,26 @@ impl Contract {
                     .set::<Storage, Address>(&buy_glyph_owner_key, &owner);
 
                 // remove all open buy glyph sell offers
-                if env.storage().persistent().has::<Storage>(&open_glyph_buy_now_offers_key) {
+                if env
+                    .storage()
+                    .persistent()
+                    .has::<Storage>(&open_glyph_buy_now_offers_key)
+                {
                     env.storage()
                         .persistent()
                         .remove::<Storage>(&open_glyph_buy_now_offers_key);
                 }
 
-                env.events()
-                    .publish((Symbol::new(&env, "offer_sell_asset"), sell, buy), Some(owner.clone()));
+                env.events().publish(
+                    (Symbol::new(&env, "offer_sell_asset"), sell, buy),
+                    Some(owner.clone()),
+                );
 
                 Ok(Some(owner))
             }
             // No matching open counter offer. Add to buy glyph offers
             Err(_index) => {
-                let offer_sell_asset_key =
-                    Storage::OfferSellAsset(buy, sac.clone(), amount);
+                let offer_sell_asset_key = Storage::OfferSellAsset(buy, sac.clone(), amount);
 
                 let mut offers = env
                     .storage()
@@ -715,7 +745,11 @@ impl Contract {
         glyph_owner.require_auth();
 
         env.events().publish(
-            (Symbol::new(&env, "offer_sell_glyph_remove"), sell, buy.clone()),
+            (
+                Symbol::new(&env, "offer_sell_glyph_remove"),
+                sell,
+                buy.clone(),
+            ),
             (),
         );
 
@@ -741,19 +775,21 @@ impl Contract {
                 }
             }
             None => {
-                if env.storage().persistent().has::<Storage>(&offer_sell_glyph_key) {
-                    env.storage().persistent().remove::<Storage>(&offer_sell_glyph_key);
+                if env
+                    .storage()
+                    .persistent()
+                    .has::<Storage>(&offer_sell_glyph_key)
+                {
+                    env.storage()
+                        .persistent()
+                        .remove::<Storage>(&offer_sell_glyph_key);
                 }
 
                 Ok(())
             }
         }
     }
-    pub fn offer_sell_asset_remove(
-        env: Env,
-        sell: OfferSellAsset,
-        buy: u32,
-    ) -> Result<(), Error> {
+    pub fn offer_sell_asset_remove(env: Env, sell: OfferSellAsset, buy: u32) -> Result<(), Error> {
         let OfferSellAsset(owner, sac, amount) = sell.clone();
 
         owner.require_auth();
@@ -843,11 +879,12 @@ impl Contract {
     }
 
     pub fn royalties_get(env: Env, owner: Address, sac: Address) -> Result<i128, Error> {
-        let royalties = env.storage()
+        let royalties = env
+            .storage()
             .persistent()
             .get::<Storage, i128>(&Storage::Royalties(owner, sac))
             .unwrap_or(0);
-        
+
         Ok(royalties)
     }
     pub fn royalties_claim(env: Env, owner: Address, sac: Address) -> Result<i128, Error> {
@@ -897,6 +934,31 @@ impl CustomAccountInterface for Contract {
 
         Ok(())
     }
+}
+
+fn pay_fee(env: &Env, fee_key: Storage, source: &Address) -> Result<(), Error> {
+    let fee_address = env
+        .storage()
+        .instance()
+        .get::<Storage, Address>(&Storage::FeeAddress)
+        .ok_or(Error::NotInitialized)?;
+    let fee_amount = env
+        .storage()
+        .instance()
+        .get::<Storage, i128>(&fee_key)
+        .ok_or(Error::NotInitialized)?;
+    let fee_sac = env
+        .storage()
+        .instance()
+        .get::<Storage, Address>(&Storage::FeeSAC)
+        .ok_or(Error::NotInitialized)?;
+    let fee_client = token::TokenClient::new(&env, &fee_sac);
+
+    source.require_auth();
+
+    fee_client.transfer(&source, &fee_address, &fee_amount);
+
+    Ok(())
 }
 
 fn get_palette(colors: Bytes) -> [u32; 256] {

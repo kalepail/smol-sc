@@ -5,7 +5,7 @@ import { Server } from "@stellar/stellar-sdk/rpc";
 const rpc = new Server('https://soroban-testnet.stellar.org');
 
 let { entries } = await rpc._getLedgerEntries(xdr.LedgerKey.contractData(new xdr.LedgerKeyContractData({
-    contract: Address.fromString('CDE37MDCRXLY5VJYRNYTSBBDBUIBIP5ZYO54T25P3UTFIOOGML4LZ7V4').toScAddress(),
+    contract: Address.fromString('CA3SPLLDBCOVZDDFAXNDNDBWH5E3ULRX5AL2MVQWOCGLJO7IGO5YHE7J').toScAddress(),
     key: xdr.ScVal.scvVec([
         xdr.ScVal.scvSymbol('Glyph'),
         xdr.ScVal.scvU32(2)

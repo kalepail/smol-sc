@@ -1,4 +1,4 @@
-# CDE37MDCRXLY5VJYRNYTSBBDBUIBIP5ZYO54T25P3UTFIOOGML4LZ7V4
+# CA3SPLLDBCOVZDDFAXNDNDBWH5E3ULRX5AL2MVQWOCGLJO7IGO5YHE7J
 
 default: build
 
@@ -22,6 +22,7 @@ deploy: build
 		--fee-sac CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
 		--fee-address default \
 		--color-claim-fee 2500000000 \
+		--glyph-mine-fee 10000000 \
 		--color-owner-royalty-rate 2 \
 		--glyph-author-royalty-rate 5
 
